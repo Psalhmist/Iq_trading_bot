@@ -13,9 +13,9 @@ logger = logging.getLogger(__name__)
 
 # --- CRITICAL CONFIGURATION ---
 # Replace with your bot token
-BOT_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN" 
+BOT_TOKEN = "7959603648:AAGMRQz0XNeqXoW4m3SUNzR_OvflsdZdXfc" 
 # The admin's Telegram username WITHOUT the @ sign
-ADMIN_CONTACT = "YOUR_ADMIN_USERNAME".lstrip('@') 
+ADMIN_CONTACT = "Psa_mist('@')"
 DATA_FILE = "users_data.json" 
 
 TRADING_PAIRS = [
