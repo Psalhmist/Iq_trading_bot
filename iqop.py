@@ -1,4 +1,4 @@
-import os 
+import os  # <--- Ensure os is imported
 import random
 import time
 import json
@@ -11,12 +11,17 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# --- CRITICAL CONFIGURATION ---
-# Replace with your bot token
-BOT_TOKEN = "7959603648:AAGMRQz0XNeqXoW4m3SUNzR_OvflsdZdXfc" 
-# The admin's Telegram username WITHOUT the @ sign
-ADMIN_CONTACT = "Psa_mist('@')"
-DATA_FILE = "users_data.json" 
+# --- CRITICAL CONFIGURATION (Fetching from Environment Variables) ---
+
+# Fetch variables securely from the Render environment
+BOT_TOKEN = os.environ.get("BOT_TOKEN")  # Fetched from Render Env
+ADMIN_CONTACT = os.environ.get("ADMIN_CONTACT") # Fetched from Render Env
+
+# The Webhook URL and PORT are needed for deployment configuration
+WEBHOOK_URL = os.environ.get("WEBHOOK_URL") # Fetched from Render Env
+PORT = int(os.environ.get("PORT", 8080))  # Render sets a PORT environment variable
+
+DATA_FILE = "users_data.json"  
 
 TRADING_PAIRS = [
     "BTC/USD OTC", "ETH/USD OTC", "EUR/USD OTC", "EUR/GBP OTC", "USD/CHF OTC", "EUR/JPY OTC",
@@ -32,8 +37,8 @@ TRADING_PAIRS = [
 ]
 
 TRADING_ACTIONS = ["BUY", "SELL"]
-FREE_SIGNAL_LIMIT = 20 # 👈 20 free signals per user
-EXPIRY_MINUTES = 3 # Base time for calculation
+FREE_SIGNAL_LIMIT = 20
+EXPIRY_MINUTES = 3 
 
 # --- Persistent Storage ---
 
@@ -42,13 +47,10 @@ def load_user_data():
     try:
         with open(DATA_FILE, 'r') as f:
             raw_data = json.load(f)
-            # Adjust keys to match original intent: 'signals' for free count
-            # and ensure 'paid_until' is a datetime object
             converted_data = {}
             for k, u in raw_data.items():
                 if u.get("paid_until"):
                     u["paid_until"] = datetime.strptime(u["paid_until"], "%Y-%m-%d %H:%M:%S")
-                # Maintain 'signals' key for compatibility with original logic
                 u["signals"] = u.pop("free_signals_used", u.get("signals", 0))
                 converted_data[int(k)] = u
             return converted_data
@@ -60,7 +62,6 @@ def save_user_data():
     try:
         data_copy = {}
         for uid, u in user_data.items():
-            # Ensure 'signals' is saved, and 'paid_until' is a string
             data_copy[str(uid)] = {
                 "signals": u.get("signals", 0),
                 "paid_until": u["paid_until"].strftime("%Y-%m-%d %H:%M:%S") if u.get("paid_until") else None,
@@ -77,19 +78,16 @@ user_data = load_user_data()
 def get_next_even_minute(minutes_from_now=EXPIRY_MINUTES):
     """Calculates the next even minute for a 2-minute candle trade (as per instruction)."""
     now = datetime.now() + timedelta(minutes=minutes_from_now)
-    # If minute is odd, add 1 minute to make it even
     if now.minute % 2 != 0:
         now += timedelta(minutes=1)
     return now.replace(second=0, microsecond=0)
 
 def pick_random_pair(history: list, non_repetition: int = 6) -> str:
     """Picks a random trading pair, avoiding recent ones."""
-    # history stores the full signal string, so extract only the pair
     recent_pairs = [h.split(' - ')[0].replace('🟢 ', '').replace('🔴 ', '') for h in history[-non_repetition:]]
     available_pairs = [p for p in TRADING_PAIRS if p not in recent_pairs]
     
     if not available_pairs:
-        # Fallback to all pairs if all are recently used
         available_pairs = list(TRADING_PAIRS)
         
     return random.choice(available_pairs)
@@ -97,26 +95,23 @@ def pick_random_pair(history: list, non_repetition: int = 6) -> str:
 def format_signal(pair: str, action: str, trade_time: datetime) -> str:
     """Formats the trading signal message."""
     emoji = "🟢" if action == "BUY" else "🔴"
-    time_str = trade_time.strftime('%H:%M') # Only display hour and minute
+    time_str = trade_time.strftime('%H:%M') 
     
-    # Format: 🟢 BTC/USD OTC - BUY | 2min Candle | Time: 16:03
     return f"{emoji} **{pair}** - **{action}** | 2min Candle | Time: {time_str}"
 
 def generate_signal_logic(user_id: int) -> tuple[str | None, str | None]:
     """Core logic to generate a signal, checking for subscription status and limits."""
     
     if user_id not in user_data:
-        # Initialize user with signals (free limit), no payment, and history tracking
         user_data[user_id] = {"signals": 0, "paid_until": None, "history": []}
     
     user = user_data[user_id]
     now = datetime.now()
     
-    # Subscription Check
     is_paid = user.get("paid_until") and user["paid_until"] > now
     is_limit_reached = user.get("signals", 0) >= FREE_SIGNAL_LIMIT
 
-    # 💰 LIMIT CHECK (Exact instruction logic)
+    # 💰 LIMIT CHECK
     if not is_paid and is_limit_reached:
         error_msg = (
             f"💰 Free signals used or subscription expired. Please subscribe to continue.\n"
@@ -130,7 +125,7 @@ def generate_signal_logic(user_id: int) -> tuple[str | None, str | None]:
     trade_time = get_next_even_minute()
     signal = format_signal(pair, action, trade_time)
 
-    # Update data: history is mandatory for non-repetition logic
+    # Update data
     user["history"] = user.get("history", []) + [signal]
 
     # Increment counter ONLY if the user is NOT paid
@@ -146,11 +141,12 @@ def generate_signal_logic(user_id: int) -> tuple[str | None, str | None]:
     else:
         remaining = FREE_SIGNAL_LIMIT - user["signals"]
         footer = f"\n(Free signals remaining: {remaining})"
-    
+        
     return signal, footer
 
 # --- Command Handlers ---
 
+# (All Command Handlers remain unchanged)
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handles the /start command."""
     await update.message.reply_text(
@@ -248,22 +244,26 @@ async def mark_paid(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("An unexpected error occurred.")
 
 
-# --- Main Execution Setup ---
+# --- Main Execution Setup (Using Webhook for Render Web Service) ---
 
 def main():
-    """Sets up and runs the Telegram bot."""
-    if not BOT_TOKEN:
-        print("Error: BOT_TOKEN is not set. Please update the configuration.")
-        return
+    """Sets up and runs the Telegram bot using Webhook on Render."""
+    
+    if not BOT_TOKEN or not WEBHOOK_URL:
+        logger.error("Configuration Error: BOT_TOKEN or WEBHOOK_URL environment variable is missing.")
+        # Exit with error to force a log entry
+        exit(1) 
+        
+    logger.info("Building Application...")
 
     application = (
         Application.builder()
         .token(BOT_TOKEN)
-        .concurrent_updates(True) 
+        .concurrent_updates(True)
         .build()
     )
 
-    # Add all handlers (as per instruction)
+    # Add all handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("signal", signal_command))
     application.add_handler(CommandHandler("free", free))
@@ -271,12 +271,17 @@ def main():
     application.add_handler(CommandHandler("howtouse", howtouse))
     application.add_handler(CommandHandler("support", support))
     application.add_handler(CommandHandler("about", about))
-    application.add_handler(CommandHandler("mark_paid", mark_paid)) 
+    application.add_handler(CommandHandler("mark_paid", mark_paid))
 
-    print("Bot is starting polling...")
-    # NOTE: Use run_polling() for local testing. Use Webhook for deployment (e.g., Render).
-    application.run_polling(poll_interval=3.0) 
+    # Start the Webhook: This listens on the port and keeps the process running
+    application.run_webhook(
+        listen="0.0.0.0",  # Listen on all network interfaces
+        port=PORT,
+        url_path=BOT_TOKEN, # Use token as a secure path
+        webhook_url=f"{WEBHOOK_URL}/{BOT_TOKEN}"
+    )
+    
+    logger.info(f"Bot listening on port {PORT} via Webhook.")
 
 if __name__ == "__main__":
-    # main()
-    pass
+    main() # <--- THIS LINE IS NOW UNCOMMENTED AND CALLS WEBHOOK
