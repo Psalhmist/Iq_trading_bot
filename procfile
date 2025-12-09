@@ -1,1 +1,1 @@
-web: python iqop.py
+web: $HOME/.pyenv/versions/3.11.9/bin/python iqop.py
