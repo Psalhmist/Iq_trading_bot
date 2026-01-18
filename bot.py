@@ -9,14 +9,14 @@ from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, Callb
 # ==============================================================================
 # 1. CONFIGURATION
 # ==============================================================================
-TOKEN = "YOUR_TELEGRAM_BOT_TOKEN_HERE"  # <--- REPLACE THIS
-ADMIN_ID = 123456789                    # <--- REPLACE THIS WITH YOUR USER ID
+TOKEN = "8289179943:AAGwym_czUhsWPLmWsJg5BwSA4SxQfxXOZg"
+ADMIN_ID = 8308835896  # This is your ID
 
 DB_NAME = "signalmaster.db"
 MAX_MARTINGALE_LEVEL = 6
 FREE_SIGNALS_LIMIT = 20
 
-# Your Full Trading Pair List
+# FULL OTC PAIR LIST
 PAIRS = [
     "BTC/USD OTC", "ETH/USD OTC", "EUR/USD OTC", "EUR/GBP OTC", "USD/CHF OTC", "EUR/JPY OTC",
     "GBP/USD OTC", "GBP/JPY OTC", "AUD/CAD OTC", "USD/ZAR OTC", "USD/SGD OTC", "USD/HKD OTC",
@@ -32,7 +32,6 @@ PAIRS = [
 
 TIMEFRAMES = ["1m", "3m", "5m", "15m"]
 
-# Logging Setup
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
@@ -92,7 +91,7 @@ def generate_market_signal(last_pair=None):
     pair = random.choice(available_pairs if available_pairs else PAIRS)
     timeframe = random.choice(TIMEFRAMES)
     
-    # Random delay 2-7 minutes
+    # Smart Delay: 2 to 7 minutes in future
     now = datetime.now()
     delay_minutes = random.randint(2, 7)
     future_time = now + timedelta(minutes=delay_minutes)
@@ -101,7 +100,7 @@ def generate_market_signal(last_pair=None):
     return {"pair": pair, "time": open_time_str, "timeframe": timeframe}
 
 # ==============================================================================
-# 4. BOT HANDLERS
+# 4. BOT HANDLERS & PAYMENT
 # ==============================================================================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -125,12 +124,49 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     await update.message.reply_text(intro_text, parse_mode='Markdown', reply_markup=InlineKeyboardMarkup(keyboard))
 
+async def subscribe(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    user_id = query.from_user.id
+    
+    # ⚠️ EDIT THESE DETAILS BEFORE LAUNCH ⚠️
+    USDT_ADDRESS = "T9xxxxxxxxxxxxxxxxxxxxxxxxxxxx"  
+    BANK_NAME = "OPAY"                            
+    ACCOUNT_NUMBER = "8123456789"                 
+    ACCOUNT_NAME = "YOUR NAME"               
+    PRICE_NGN = "85,000"
+    ADMIN_USERNAME = "YourTelegramUsername" # Put your username here (without @)
+
+    msg = (
+        "💳 **PREMIUM SUBSCRIPTION**\n\n"
+        "Unlock unlimited signals and maximize your profit potential.\n"
+        f"**Price:** $50 / ₦{PRICE_NGN} (Lifetime)\n\n"
+        
+        "━━━━━━━━━━━━━━━━━━\n"
+        "**OPTION 1: CRYPTO (USDT TRC20)**\n"
+        "Tap to copy address:\n"
+        f"`{USDT_ADDRESS}`\n\n"
+        
+        "━━━━━━━━━━━━━━━━━━\n"
+        "**OPTION 2: BANK TRANSFER (NGN)**\n"
+        f"🏦 Bank: **{BANK_NAME}**\n"
+        f"🔢 Acct: `{ACCOUNT_NUMBER}`\n"
+        f"👤 Name: **{ACCOUNT_NAME}**\n\n"
+        
+        "━━━━━━━━━━━━━━━━━━\n"
+        f"⚠️ **VERIFICATION:**\n"
+        f"After payment, send your User ID `{user_id}` and a screenshot of the receipt to the Admin."
+    )
+    
+    keyboard = [[InlineKeyboardButton("📩 SEND PROOF TO ADMIN", url=f"https://t.me/{ADMIN_USERNAME}")]]
+    await query.message.reply_text(msg, parse_mode='Markdown', reply_markup=InlineKeyboardMarkup(keyboard))
+
 async def send_signal(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user_id = query.from_user.id
     user = get_user(user_id)
 
-    # 1. Check Subscription / Free Limit
+    # Check Subscription
     if user['free_signals'] <= 0 and not user['subscription_status']:
         await query.message.reply_text(
             "⛔ **Free Signals Depleted**\n\n"
@@ -141,7 +177,7 @@ async def send_signal(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # 2. Check Martingale Safety Cap
+    # Check Martingale Safety
     if user['martingale_level'] >= MAX_MARTINGALE_LEVEL:
         update_user_stat(user_id, martingale_level=0, active_chain=0)
         await query.message.reply_text(
@@ -154,7 +190,7 @@ async def send_signal(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await asyncio.sleep(2)
         user = get_user(user_id)
 
-    # 3. Generate Signal
+    # Generate Signal
     signal_data = generate_market_signal(last_pair=user['last_pair'])
     update_user_stat(user_id, last_pair=signal_data['pair'])
 
@@ -213,31 +249,19 @@ async def check_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("▶️ GENERATE SIGNAL", callback_data='action_start')]]
     await query.message.reply_text(stats_msg, parse_mode='Markdown', reply_markup=InlineKeyboardMarkup(keyboard))
 
-async def subscribe(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    user_id = query.from_user.id
-    msg = (
-        "💳 **PREMIUM SUBSCRIPTION**\n\n"
-        "Unlock unlimited signals and maximize your profit potential.\n\n"
-        "**Price:** $50 / Lifetime\n"
-        "**Method:** USDT (TRC20)\n"
-        "`T9xxxxxxxxxxxxxxxxxxxxxxxxxxxx`\n\n"
-        f"⚠️ **IMPORTANT:**\nAfter payment, send your User ID `{user_id}` and screenshot to the admin."
-    )
-    await query.message.reply_text(msg, parse_mode='Markdown')
-
-# --- ADMIN COMMAND ---
 async def admin_approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id != ADMIN_ID:
-        return # Ignore non-admins
+        return 
 
     try:
         target_id = int(context.args[0])
         update_user_stat(target_id, subscription_status=1)
         await update.message.reply_text(f"✅ User {target_id} is now PREMIUM.")
-        await context.bot.send_message(chat_id=target_id, text="🎉 **Payment Received!**\n\nYour Premium Subscription is now ACTIVE.\nYou have unlimited signals.")
+        try:
+            await context.bot.send_message(chat_id=target_id, text="🎉 **Payment Received!**\n\nYour Premium Subscription is now ACTIVE.\nYou have unlimited signals.")
+        except:
+            await update.message.reply_text(f"⚠️ User {target_id} upgraded, but couldn't send DM.")
     except (IndexError, ValueError):
         await update.message.reply_text("❌ Usage: /approve <user_id>")
 
@@ -250,7 +274,7 @@ if __name__ == '__main__':
     app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("approve", admin_approve)) # Admin command
+    app.add_handler(CommandHandler("approve", admin_approve)) 
     app.add_handler(CallbackQueryHandler(send_signal, pattern='^action_start$'))
     app.add_handler(CallbackQueryHandler(check_stats, pattern='^action_stats$'))
     app.add_handler(CallbackQueryHandler(subscribe, pattern='^action_sub$'))
