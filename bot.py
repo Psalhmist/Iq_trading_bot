@@ -441,4 +441,6 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler("broadcast", broadcast_command))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_menu_clicks))
     app.add_handler(CallbackQueryHandler(handle_callback))
-    app.run_polling()
+    import signal
+# This helps the bot shut down and restart cleanly on their servers
+app.run_polling(stop_signals=[signal.SIGINT, signal.SIGTERM, signal.SIGABRT])
